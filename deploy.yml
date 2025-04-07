@@ -1,0 +1,37 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]
+
+env:
+  AWS_EC2_IP: ${{ secrets.AWS_EC2_IP }}
+  SSH_KEY: ${{ secrets.SSH_KEY }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKER_HUB_USERNAME }}
+        password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+    - name: Build and push Docker image
+      run: |
+        docker build -t yourusername/sample-app:latest .
+        docker push yourusername/sample-app:latest
+
+    - name: Deploy to EC2
+      run: |
+        echo "$SSH_KEY" > private_key.pem
+        chmod 600 private_key.pem
+        ssh -i private_key.pem -o StrictHostKeyChecking=no ubuntu@$AWS_EC2_IP \
+          "docker pull yourusername/sample-app:latest && \
+           docker stop app || true && \
+           docker rm app || true && \
+           docker run -d -p 80:3000 --name app yourusername/sample-app:latest"
